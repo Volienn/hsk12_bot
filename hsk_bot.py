@@ -283,7 +283,7 @@ def build_message(indices, state):
     date_str = now_vn.strftime("%d/%m/%Y")
 
     lines = [
-        f"🇨🇳 *HSK 1\\-2 | {session} | {date_str}*",
+        f"🇨🇳 *HSK 1\\-2 \\| {session} \\| {date_str}*",
         f"📚 Vòng \\#{state['cycle']} — Tiến độ: {done_count}/{total} từ \\({pct}%\\)",
         f"`{bar}`",
         "",
@@ -298,7 +298,7 @@ def build_message(indices, state):
             return s
         lines += [
             "",
-            f"*{rank}\\. {esc(hanzi)}*  |  _{esc(pinyin)}_",
+            f"*{rank}\\. {esc(hanzi)}*  \\|  _{esc(pinyin)}_",
             f"📖 {esc(meaning)}",
             f"💬 {esc(example)}",
         ]
@@ -331,10 +331,31 @@ async def job():
     save_state(state)
 
 
+def escape_markdown_v2(text: str) -> str:
+    for c in r"\_*[]()~`>#+-=|{}.!":
+        text = text.replace(c, f"\\{c}")
+    return text
+
+
+async def send_deployment_notification():
+    text = (
+        "HSK bot deployment notice\n"
+        f"Time: {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"Schedule: {', '.join(SCHEDULE_TIMES)}\n"
+        f"Words per send: {WORDS_PER_DAY}"
+    )
+    await send_telegram(escape_markdown_v2(text))
+
+
 # ── Scheduler ──────────────────────────────────────────────
 async def main():
     print("🤖 HSK Reminder Bot khởi động — múi giờ Asia/Ho_Chi_Minh")
     print(f"⏰ Lịch gửi: {', '.join(SCHEDULE_TIMES)}  |  {WORDS_PER_DAY} từ/lần")
+
+    try:
+        await send_deployment_notification()
+    except Exception as e:
+        print(f"❌ Deployment notification failed: {e}")
 
     sent_today: set[str] = set()
 
