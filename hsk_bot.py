@@ -13,7 +13,7 @@ BOT_TOKEN      = os.environ["BOT_TOKEN"]
 CHAT_ID        = os.environ["CHAT_ID"]
 WORDS_PER_DAY  = int(os.environ.get("WORDS_PER_DAY", "3"))
 # Giờ gửi theo giờ Việt Nam, cách nhau bởi dấu phẩy
-SCHEDULE_TIMES = os.environ.get("SCHEDULE_TIMES", "08:00,20:00").split(",")
+SCHEDULE_TIMES = [t.strip() for t in os.environ.get("SCHEDULE_TIMES", "08:00,20:00").split(",")]
 TIMEZONE       = pytz.timezone("Asia/Ho_Chi_Minh")
 STATE_FILE     = "/app/data/state.json"
 # ============================================================
@@ -260,7 +260,8 @@ def save_state(state):
 def pick_words(state, n=WORDS_PER_DAY):
     if len(state["remaining"]) < n:
         leftover = state["remaining"][:]
-        new_pool = list(range(len(VOCAB)))
+        leftover_set = set(leftover)
+        new_pool = [i for i in range(len(VOCAB)) if i not in leftover_set]
         random.shuffle(new_pool)
         state["done"] = []
         state["remaining"] = leftover + new_pool
@@ -269,6 +270,12 @@ def pick_words(state, n=WORDS_PER_DAY):
     state["remaining"] = state["remaining"][n:]
     state["done"].extend(chosen)
     return chosen
+
+
+def esc(s):
+    for c in r"\_*[]()~`>#+-=|{}.!":
+        s = s.replace(c, f"\\{c}")
+    return s
 
 
 # ── Message builder ────────────────────────────────────────
@@ -291,11 +298,6 @@ def build_message(indices, state):
     ]
     for rank, idx in enumerate(indices, 1):
         hanzi, pinyin, meaning, example = VOCAB[idx]
-        # Escape MarkdownV2 special chars in dynamic content
-        def esc(s):
-            for c in r"\_*[]()~`>#+-=|{}.!":
-                s = s.replace(c, f"\\{c}")
-            return s
         lines += [
             "",
             f"*{rank}\\. {esc(hanzi)}*  \\|  _{esc(pinyin)}_",
@@ -358,15 +360,16 @@ async def main():
         print(f"❌ Deployment notification failed: {e}")
 
     sent_today: set[str] = set()
+    current_date = datetime.now(TIMEZONE).strftime("%Y-%m-%d")
 
     while True:
         now_vn = datetime.now(TIMEZONE)
         hhmm = now_vn.strftime("%H:%M")
         date_key = now_vn.strftime("%Y-%m-%d")
 
-        # Reset sent_today mỗi ngày mới
-        if not any(k.startswith(date_key) for k in sent_today):
-            sent_today = {k for k in sent_today if k.startswith(date_key)}
+        if date_key != current_date:
+            sent_today.clear()
+            current_date = date_key
 
         slot_key = f"{date_key}_{hhmm}"
         if hhmm in SCHEDULE_TIMES and slot_key not in sent_today:
